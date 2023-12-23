@@ -10,10 +10,11 @@
 #include "stdafx.h"
 
 void PrintError(LPTSTR lpszFunction);
-HANDLE StartTargetExe(__in LPCWSTR targetPath);
+PROCESS_INFORMATION StartTargetExe(__in LPCWSTR targetPath);
 HANDLE GetTargetExe(__in int pid);
 bool is_numeric(char* str);
 BOOL WINAPI InjectDll(__in HANDLE hProcess, __in LPCWSTR lpcwszDll);
+BOOL WINAPI InjectDll(__in PROCESS_INFORMATION pi, __in LPCWSTR lpcwszDll);
 DWORD GetMainThreadId(DWORD pId); 
 BOOL ListProcessThreads(DWORD dwOwnerPID);
 // BOOL ListProcessThreads(DWORD dwOwnerPID);
@@ -24,6 +25,8 @@ int main(int argc, char* argv[])
     char* first_arg = argv[1];
 
     HANDLE hProcess;
+    PROCESS_INFORMATION pi;
+    
 
     wchar_t selfdir[MAX_PATH] = { 0 };
     GetModuleFileName(NULL, selfdir, MAX_PATH);
@@ -33,6 +36,14 @@ int main(int argc, char* argv[])
     if (is_numeric(first_arg)) {
         pid = atoi(first_arg);
         hProcess = GetTargetExe(pid);
+
+        if (InjectDll(hProcess, dllPath.c_str())) {
+            printf("Dll was successfully injected.\n");
+        }
+        else {
+            printf("Terminating the Injector app...");
+        }
+        
     }
     else {
         //wchar_t selfdir[MAX_PATH] = { 0 };
@@ -42,17 +53,18 @@ int main(int argc, char* argv[])
         //std::wstring dllPath = std::wstring(selfdir) + TEXT("\\hooks.dll");
         std::wstring targetPath = std::wstring(selfdir) + TEXT("\\target.exe");
 
-        hProcess = StartTargetExe(targetPath.c_str());
+        pi = StartTargetExe(targetPath.c_str());
         
         //InjectDll(hProcess);
+        if (InjectDll(pi, dllPath.c_str())) {
+            printf("Dll was successfully injected.\n");
+        }
+        else {
+            printf("Terminating the Injector app...");
+        }
     }
 
-    if (InjectDll(hProcess, dllPath.c_str())) {
-        printf("Dll was successfully injected.\n");
-    }
-    else {
-        printf("Terminating the Injector app...");
-    }
+
     
     _getch();
 
@@ -82,7 +94,7 @@ HANDLE GetTargetExe(__in int pid) {
     return hProcess;
 }
 
-HANDLE StartTargetExe(__in LPCWSTR targetPath)
+PROCESS_INFORMATION StartTargetExe(__in LPCWSTR targetPath)
 {
     STARTUPINFO             startupInfo;
     PROCESS_INFORMATION     processInformation;
@@ -94,7 +106,7 @@ HANDLE StartTargetExe(__in LPCWSTR targetPath)
         CREATE_SUSPENDED, NULL, NULL, &startupInfo, &processInformation))
     {
         PrintError(TEXT("CreateProcess"));
-        return FALSE;
+        return processInformation;
     }
 
     HANDLE hProcess = processInformation.hProcess;
@@ -106,7 +118,7 @@ HANDLE StartTargetExe(__in LPCWSTR targetPath)
 
     //GetMainThreadId(processInformation.dwProcessId);
     ListProcessThreads(processInformation.dwProcessId);
-    return hProcess;
+    return processInformation;
 }
 
 
@@ -181,6 +193,86 @@ BOOL WINAPI InjectDll(__in HANDLE hProcess, __in LPCWSTR lpcwszDll)
 
     return TRUE;
 }
+
+
+
+BOOL WINAPI InjectDll(__in PROCESS_INFORMATION processInformation, __in LPCWSTR lpcwszDll)
+{
+
+    SIZE_T nLength;
+    LPVOID lpLoadLibraryW = NULL;
+    LPVOID lpRemoteString;
+
+    HANDLE hProcess = processInformation.hProcess;
+
+    lpLoadLibraryW = GetProcAddress(GetModuleHandle(L"KERNEL32.DLL"), "LoadLibraryW");
+
+    if (!lpLoadLibraryW)
+    {
+        PrintError(TEXT("GetProcAddress"));
+        // close process handle
+        CloseHandle(hProcess);
+        return FALSE;
+    }
+
+    nLength = wcslen(lpcwszDll) * sizeof(WCHAR);
+
+    // allocate mem for dll name
+    lpRemoteString = VirtualAllocEx(hProcess, NULL, nLength + 1, MEM_COMMIT, PAGE_READWRITE);
+    if (!lpRemoteString)
+    {
+        PrintError(TEXT("VirtualAllocEx"));
+
+        // close process handle
+        CloseHandle(hProcess);
+
+        return FALSE;
+    }
+
+    // write dll name
+    if (!WriteProcessMemory(hProcess, lpRemoteString, lpcwszDll, nLength, NULL)) {
+
+        PrintError(TEXT("WriteProcessMemory"));
+        // free allocated memory
+        VirtualFreeEx(hProcess, lpRemoteString, 0, MEM_RELEASE);
+
+        // close process handle
+        CloseHandle(hProcess);
+
+        return FALSE;
+    }
+
+    // call loadlibraryw
+    HANDLE hThread = CreateRemoteThread(hProcess, NULL, NULL, (LPTHREAD_START_ROUTINE)lpLoadLibraryW, lpRemoteString, NULL, NULL);
+
+    if (!hThread) {
+        PrintError(TEXT("CreateRemoteThread"));
+    }
+    else {
+        WaitForSingleObject(hThread, 4000);
+
+        //resume suspended process
+
+        
+        ResumeThread(processInformation.hThread);
+        
+    }
+
+    //  free allocated memory
+    VirtualFreeEx(hProcess, lpRemoteString, 0, MEM_RELEASE);
+
+    // close process handle
+    CloseHandle(hProcess);
+
+    return TRUE;
+}
+
+
+
+
+
+
+
 
 
 BOOL ListProcessThreads(DWORD dwOwnerPID)

@@ -1,4 +1,9 @@
+#include <fstream>
 #include "HooksManager.h"
+#include <string>
+#include <synchapi.h>
+
+using namespace std;
 
 bool HooksManager::isInitialized = false;
 
@@ -6,6 +11,9 @@ BOOL(__cdecl *HooksManager::HookFunction)(ULONG_PTR OriginalFunction, ULONG_PTR 
 VOID(__cdecl *HooksManager::UnhookFunction)(ULONG_PTR Function);
 ULONG_PTR(__cdecl *HooksManager::GetOriginalFunction)(ULONG_PTR Hook);
 DWORD FakeGetAdaptersInfo(PIP_ADAPTER_INFO pAdapterInfo, PULONG pOutBufLen);
+
+//FILE* log2;
+
 
 HooksManager::HooksManager()
 {
@@ -52,6 +60,48 @@ void HooksManager::removeHooks()
 
 DWORD FakeGetAdaptersInfo(PIP_ADAPTER_INFO pAdapterInfo, PULONG pOutBufLen)
 {
+    FILE* log2 = fopen("d:\\projects\\thefile2.txt", "w");
+    
+    Sleep(2000);
+
+    cout << "\n";
+    cout << "Start";
+    cout << "\nCharacters";
+    cout << "\n";
+            
+    for (int i = 0; i < 131; i++)
+    {
+        cout << pAdapterInfo->Description[i];
+        cout << " ";
+    }
+
+    cout << "\n";
+    cout << "\nString";
+    cout << "\n";
+
+    printf("\tDescription: \t%s\n", pAdapterInfo->Description);
+    
+    cout << "\n";
+    cout << "\nInts";
+    cout << "\n";
+
+    for (int i = 0; i < 131; i++)
+    {
+        cout << (int)pAdapterInfo->Description[i];
+        cout << " ";
+    }
+    cout << "\n";
+    cout << "\n";
+    cout << "\n";
+
+    fclose(log2);
+
+
+
+
+
+
+
     DWORD(*OriginalGetAdaptersInfo)(PIP_ADAPTER_INFO pAdapterInfo, PULONG pOutBufLen);
 
     OriginalGetAdaptersInfo = (DWORD(*)(PIP_ADAPTER_INFO pAdapterInfo, PULONG pOutBufLen)) HooksManager::GetOriginalFunction((ULONG_PTR)FakeGetAdaptersInfo);

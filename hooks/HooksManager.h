@@ -1,6 +1,8 @@
 #pragma once
 #include "stdafx.h"
 
+extern FILE* log_file;
+
 class HooksManager
 {
     static bool isInitialized;
