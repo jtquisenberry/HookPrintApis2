@@ -1,13 +1,22 @@
 // Injector.cpp : Defines the entry point for the console application.
 //
 
+#include <iostream>
+#include <Windows.h>
+#include <winternl.h>
+#include <tchar.h>
+#pragma comment(lib, "ntdll")
+
 #include "stdafx.h"
 
 void PrintError(LPTSTR lpszFunction);
-HANDLE GetTargetExe(__in LPCWSTR lpcwszDll, __in LPCWSTR targetPath);
+HANDLE StartTargetExe(__in LPCWSTR targetPath);
 HANDLE GetTargetExe(__in int pid);
 bool is_numeric(char* str);
-BOOL WINAPI InjectDll(__in HANDLE hProcess);
+BOOL WINAPI InjectDll(__in HANDLE hProcess, __in LPCWSTR lpcwszDll);
+DWORD GetMainThreadId(DWORD pId); 
+BOOL ListProcessThreads(DWORD dwOwnerPID);
+// BOOL ListProcessThreads(DWORD dwOwnerPID);
 
 int main(int argc, char* argv[])
 {
@@ -16,29 +25,35 @@ int main(int argc, char* argv[])
 
     HANDLE hProcess;
 
+    wchar_t selfdir[MAX_PATH] = { 0 };
+    GetModuleFileName(NULL, selfdir, MAX_PATH);
+    PathRemoveFileSpec(selfdir);
+    std::wstring dllPath = std::wstring(selfdir) + TEXT("\\hooks.dll");
+
     if (is_numeric(first_arg)) {
         pid = atoi(first_arg);
-        HANDLE hProcess = GetTargetExe(pid);
+        hProcess = GetTargetExe(pid);
     }
     else {
-        wchar_t selfdir[MAX_PATH] = { 0 };
-        GetModuleFileName(NULL, selfdir, MAX_PATH);
-        PathRemoveFileSpec(selfdir);
+        //wchar_t selfdir[MAX_PATH] = { 0 };
+        //GetModuleFileName(NULL, selfdir, MAX_PATH);
+        //PathRemoveFileSpec(selfdir);
 
-        std::wstring dllPath = std::wstring(selfdir) + TEXT("\\hooks.dll");
+        //std::wstring dllPath = std::wstring(selfdir) + TEXT("\\hooks.dll");
         std::wstring targetPath = std::wstring(selfdir) + TEXT("\\target.exe");
 
-        if (InjectDll(dllPath.c_str(), targetPath.c_str())) {
-            printf("Dll was successfully injected.\n");
-        }
-        else {
-            printf("Terminating the Injector app...");
-        }
-
-        HANDLE hProcess = GetTargetExe();
+        hProcess = StartTargetExe(targetPath.c_str());
+        
+        //InjectDll(hProcess);
     }
 
-
+    if (InjectDll(hProcess, dllPath.c_str())) {
+        printf("Dll was successfully injected.\n");
+    }
+    else {
+        printf("Terminating the Injector app...");
+    }
+    
     _getch();
 
     return 0;
@@ -67,7 +82,7 @@ HANDLE GetTargetExe(__in int pid) {
     return hProcess;
 }
 
-HANDLE GetTargetExe(__in LPCWSTR lpcwszDll, __in LPCWSTR targetPath)
+HANDLE StartTargetExe(__in LPCWSTR targetPath)
 {
     STARTUPINFO             startupInfo;
     PROCESS_INFORMATION     processInformation;
@@ -83,17 +98,26 @@ HANDLE GetTargetExe(__in LPCWSTR lpcwszDll, __in LPCWSTR targetPath)
     }
 
     HANDLE hProcess = processInformation.hProcess;
+
+    /*
+    APP_MEMORY_INFORMATION aaa;
+    GetProcessInformation(hProcess, PROCESS_INFORMATION_CLASS::ProcessAppMemoryInfo, &aaa, sizeof(MEMORY_PRIORITY_INFORMATION));
+    */
+
+    //GetMainThreadId(processInformation.dwProcessId);
+    ListProcessThreads(processInformation.dwProcessId);
     return hProcess;
 }
 
 
 
-BOOL WINAPI InjectDll(__in HANDLE hProcess)
+BOOL WINAPI InjectDll(__in HANDLE hProcess, __in LPCWSTR lpcwszDll)
 {
     
     SIZE_T nLength;
     LPVOID lpLoadLibraryW = NULL;
     LPVOID lpRemoteString;
+
 
 
     lpLoadLibraryW = GetProcAddress(GetModuleHandle(L"KERNEL32.DLL"), "LoadLibraryW");
@@ -143,7 +167,10 @@ BOOL WINAPI InjectDll(__in HANDLE hProcess)
         WaitForSingleObject(hThread, 4000);
 
         //resume suspended process
+
+        /*
         ResumeThread(processInformation.hThread);
+        */
     }
 
     //  free allocated memory
@@ -154,6 +181,55 @@ BOOL WINAPI InjectDll(__in HANDLE hProcess)
 
     return TRUE;
 }
+
+
+BOOL ListProcessThreads(DWORD dwOwnerPID)
+{
+    HANDLE hThreadSnap = INVALID_HANDLE_VALUE;
+    THREADENTRY32 te32;
+
+    // Take a snapshot of all running threads  
+    hThreadSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (hThreadSnap == INVALID_HANDLE_VALUE)
+        return(FALSE);
+
+    // Fill in the size of the structure before using it. 
+    te32.dwSize = sizeof(THREADENTRY32);
+
+    // Retrieve information about the first thread,
+    // and exit if unsuccessful
+    if (!Thread32First(hThreadSnap, &te32))
+    {
+        PrintError(TEXT("Thread32First")); // show cause of failure
+        CloseHandle(hThreadSnap);          // clean the snapshot object
+        return(FALSE);
+    }
+
+    
+
+    
+    // Now walk the thread list of the system,
+    // and display information about each thread
+    // associated with the specified process
+    do
+    {
+        if (te32.th32OwnerProcessID == dwOwnerPID)
+        {
+            _tprintf(TEXT("\n\n     THREAD ID      = 0x%08X"), te32.th32ThreadID);
+            _tprintf(TEXT("\n     Base priority  = %d"), te32.tpBasePri);
+            _tprintf(TEXT("\n     Delta priority = %d"), te32.tpDeltaPri);
+            _tprintf(TEXT("\n"));
+        }
+    } while (Thread32Next(hThreadSnap, &te32));
+    
+
+    CloseHandle(hThreadSnap);
+    return(TRUE);
+}
+
+
+
+
 
 void PrintError(LPTSTR lpszFunction)
 {
