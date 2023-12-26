@@ -110,32 +110,83 @@ void printToPrinter()
     // 38
     
     OpenPrinter(pDeviceName, &phPrinter, NULL);
-    // wprintf(pDeviceName)
-    // Microsoft Print to PDF (redirected 1)
-    // >>> phPrinter
-    // 0x0000027ea837b5a0
+    wprintf(L"PRINTER\n");
+    wprintf(L"Device Name: %s\n", pDeviceName);
+    wprintf(L"Handle: 0x%#016p\n", phPrinter);
+    wprintf(L"\n");
+    // PRINTER
+    // Device Name : Bullzip PDF Printer
+    // Handle : 0x000002307C40ADE0
 
     int size = DocumentProperties(NULL, phPrinter, pDeviceName, NULL, NULL, 0);
-    // >>> size
-    // 5420
-
     pDevModeOutput = (DEVMODE*)malloc(size);
     DocumentProperties(NULL, phPrinter, pDeviceName, pDevModeOutput, NULL, DM_OUT_BUFFER);
     // wprintf(pDevModeOutput->dmDeviceName);
     // Microsoft Print to PDF (redire
-
+    wprintf(L"DocumentProperties\n");
+    wprintf(L"dmDeviceName: %s\n", pDevModeOutput->dmDeviceName);
+    wprintf(L"dmFormName: %s\n", pDevModeOutput->dmFormName);
+    wprintf(L"dmPrintQuality: %d\n", pDevModeOutput->dmPrintQuality);
+    wprintf(L"dmScale: %d\n", pDevModeOutput->dmScale);
+    wprintf(L"dmCopies: %d\n", pDevModeOutput->dmCopies);
+    wprintf(L"\n");
+    // DocumentProperties
+    // dmDeviceName: Bullzip PDF Printer
+    // dmFormName : Letter
+    // dmPrintQuality : 300
+    // dmScale : 100
+    // dmCopies : 1
+        
     HDC printerDC = CreateDC(L"WINSPOOL", pDeviceName, NULL, pDevModeOutput);
-    // >>> printerDC
-    // 0x00000000572140d1 {unused=??? }
-
-    int status = -1;
+    wprintf(L"Device Context\n");
+    wprintf(L"Handle: 0x%#016p\n", printerDC);
+    wprintf(L"\n");
+    // Device Context
+    // Handle: 0x000000007C215306
+    
+    int status = -999;
+    int JobId = -999;
 
     DOCINFO info;
     memset(&info, 0, sizeof(info));
     info.cbSize = sizeof(info);
-    status = StartDoc(printerDC, &info);
-
+    JobId = StartDoc(printerDC, &info);
+    wprintf(L"DOCINFO\n");
+    wprintf(L"cbSize: %d\n", info.cbSize);
+    wprintf(L"lpszDocName: %s\n", info.lpszDocName);
+    wprintf(L"lpszOutput: %s\n", info.lpszOutput);
+    wprintf(L"\n");
+    // DOCINFO
+    // cbSize: 40
+    // lpszDocName : (null)
+    // lpszOutput : (null)
     
+    int Level = 1;  // To retrieve a JOB_INFO_1 structure.
+    JOB_INFO_1* pJobInfo = 0;
+    DWORD cbBuf = 0;
+    DWORD pcbNeeded;
+    DWORD bytesNeeded = 0;
+    status = GetJob(phPrinter, JobId, Level, (LPBYTE)pJobInfo, cbBuf, &pcbNeeded);
+    pJobInfo = (JOB_INFO_1*)malloc(pcbNeeded);
+    status = GetJob(phPrinter, JobId, Level, (LPBYTE)pJobInfo, pcbNeeded, &pcbNeeded);
+    wprintf(L"JOB_INFO_1\n");
+    wprintf(L"JobId: %d\n", pJobInfo->JobId);
+    wprintf(L"pPrinterName: %s\n", pJobInfo->pPrinterName);
+    wprintf(L"pMachineName: %s\n", pJobInfo->pMachineName);
+    wprintf(L"Status: %d\n", pJobInfo->Status);
+    wprintf(L"cbSize: %d\n", pJobInfo->Priority);
+    wprintf(L"Position: %d\n", pJobInfo->Position);
+    wprintf(L"TotalPages: %s\n", pJobInfo->TotalPages);
+    wprintf(L"\n");
+    // JOB_INFO_1
+    // JobId: 45
+    // pPrinterName : Bullzip PDF Printer
+    // pMachineName : \\JQHOME08
+    // Status : 8
+    // cbSize : 1
+    // Position : 18
+    // TotalPages : (null)
+    // Submitted : ?
 
     status = StartPage(printerDC);
 
