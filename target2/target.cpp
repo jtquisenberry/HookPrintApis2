@@ -168,7 +168,7 @@ void printToPrinter(string dcSource, string logFile, string bitmapFile)
 
         if (!(PrintDlg(&pd) == TRUE))
         {
-            ShowError(L"PrintDlg");
+            // ShowError(L"PrintDlg");
         }
         else
         {
