@@ -22,6 +22,8 @@ void reportJob(HANDLE phPrinter, int jobId);
 void drawPrinter(HANDLE phPrinter, HDC hDC);
 void drawDesktop(HDC windowDC);
 void workflowPrinterDcName(string printerName);
+int CaptureAnImageDc(HDC hdcMemDC);
+void workflowPrinterAndBmp();
 
 int __cdecl main(int argc, char* argv[])
 {
@@ -66,6 +68,9 @@ int __cdecl main(int argc, char* argv[])
                 dcSource = temp;
             }
             else if (temp == "Name") {
+                dcSource = temp;
+            }
+            else if (temp == "Both") {
                 dcSource = temp;
             }
             
@@ -299,6 +304,26 @@ void drawPrinter(HANDLE phPrinter, HDC printerDC) {
     StartPage(printerDC);
     DrawGraphics(printerDC);
 
+    HDC memDC2 = CreateCompatibleDC(printerDC);
+
+
+    BITMAP structBitmapHeader;
+    memset(&structBitmapHeader, 0, sizeof(BITMAP));
+    BITMAP structBitmapHeader2;
+    memset(&structBitmapHeader2, 0, sizeof(BITMAP));
+    HGDIOBJ hBitmap = GetCurrentObject(printerDC, OBJ_BITMAP);
+    GetObject(hBitmap, sizeof(BITMAP), &structBitmapHeader);
+    HGDIOBJ hBitmap2 = GetCurrentObject(memDC2, OBJ_BITMAP);
+    GetObject(hBitmap2, sizeof(BITMAP), &structBitmapHeader2);
+    int bmWidth = structBitmapHeader.bmWidth;
+    int bmHeight = structBitmapHeader.bmHeight;
+    int bmWidth2 = structBitmapHeader2.bmWidth;
+    int bmHeight2 = structBitmapHeader2.bmHeight;
+
+
+
+
+
     HDC memDC = CreateCompatibleDC(printerDC);
     HBITMAP memBM = CreateCompatibleBitmap(printerDC, 400, 400);
     SelectObject(memDC, memBM);
@@ -315,6 +340,7 @@ void drawPrinter(HANDLE phPrinter, HDC printerDC) {
 
 void drawDesktop(HDC windowDC) {
     DrawGraphics(windowDC);
+    CaptureAnImageDc(windowDC);
 }
 
 void reportJob(HANDLE phPrinter, int jobId) {
@@ -351,6 +377,12 @@ void reportJob(HANDLE phPrinter, int jobId) {
     return;
 }
 
+void workflowPrinterAndBmp() {
+    MessageBox(NULL, L"workflowPrinterAndBmp", L"workflowPrinterAndBmp", 1);
+    return;
+}
+
+
 void printToPrinter(string dcSource, string logFile, string bitmapFile, string printerName)
 {
     // https://learn.microsoft.com/en-us/windows/win32/printdocs/openprinter
@@ -375,6 +407,9 @@ void printToPrinter(string dcSource, string logFile, string bitmapFile, string p
     }
     else if (dcSource == "Desktop") {
         workflowDesktopDc();
+    }
+    else if (dcSource == "Both") {
+        workflowPrinterAndBmp();
     }
     else {
         workflowPrinterDcDefault();
@@ -601,6 +636,137 @@ done:
     DeleteObject(hbmScreen);
     DeleteObject(hdcMemDC);
     
+
+    return 0;
+}
+
+int CaptureAnImageDc(HDC hdcWindow)
+{
+    HDC hdcScreen;
+    //HDC hdcWindow;
+    HDC hdcMemDC = NULL;
+    HBITMAP hbmScreen = NULL;
+    BITMAP bmpScreen;
+    DWORD dwBytesWritten = 0;
+    DWORD dwSizeofDIB = 0;
+    HANDLE hFile = NULL;
+    char* lpbitmap = NULL;
+    HANDLE hDIB = NULL;
+    DWORD dwBmpSize = 0;
+
+    int result = -999;
+
+
+    BITMAP structBitmapHeader;
+    memset(&structBitmapHeader, 0, sizeof(BITMAP));
+    HGDIOBJ hBitmap = GetCurrentObject(hdcWindow, OBJ_BITMAP);
+    GetObject(hBitmap, sizeof(BITMAP), &structBitmapHeader);
+    int bmWidth = structBitmapHeader.bmWidth;
+    int bmHeight = structBitmapHeader.bmHeight;
+
+    // Create a compatible DC, which is used in a BitBlt from the window DC.
+    hdcMemDC = CreateCompatibleDC(hdcWindow);
+
+    BITMAP structBitmapHeader2;
+    memset(&structBitmapHeader2, 0, sizeof(BITMAP));
+    HGDIOBJ hBitmap2 = GetCurrentObject(hdcMemDC, OBJ_BITMAP);
+    GetObject(hBitmap2, sizeof(BITMAP), &structBitmapHeader2);
+    int bmWidth2 = structBitmapHeader2.bmWidth;
+    int bmHeight2 = structBitmapHeader2.bmHeight;
+
+
+
+    // Bit block transfer into our compatible memory DC.
+    BitBlt(hdcMemDC,
+        0, 0,
+        bmWidth, bmHeight,
+        hdcWindow,
+        0, 0,
+        SRCCOPY);
+
+    // Create a compatible bitmap from the Window DC.
+    hbmScreen = CreateCompatibleBitmap(hdcWindow, bmWidth, bmHeight);
+
+    // Select the compatible bitmap into the compatible memory DC.
+    SelectObject(hdcMemDC, hbmScreen);
+
+    // Bit block transfer into our compatible memory DC.
+    BitBlt(hdcMemDC,
+        0, 0,
+        bmWidth, bmHeight,
+        hdcWindow,
+        0, 0,
+        SRCCOPY);
+
+    // Get the BITMAP from the HBITMAP.
+    GetObject(hbmScreen, sizeof(BITMAP), &bmpScreen);
+
+    BITMAPFILEHEADER   bmfHeader;
+    BITMAPINFOHEADER   bi;
+
+    bi.biSize = sizeof(BITMAPINFOHEADER);
+    bi.biWidth = bmpScreen.bmWidth;
+    bi.biHeight = bmpScreen.bmHeight;
+    bi.biPlanes = 1;
+    bi.biBitCount = 32;
+    bi.biCompression = BI_RGB;
+    bi.biSizeImage = 0;
+    bi.biXPelsPerMeter = 0;
+    bi.biYPelsPerMeter = 0;
+    bi.biClrUsed = 0;
+    bi.biClrImportant = 0;
+
+    dwBmpSize = ((bmpScreen.bmWidth * bi.biBitCount + 31) / 32) * 4 * bmpScreen.bmHeight;
+
+    // Starting with 32-bit Windows, GlobalAlloc and LocalAlloc are implemented as wrapper functions that 
+    // call HeapAlloc using a handle to the process's default heap. Therefore, GlobalAlloc and LocalAlloc 
+    // have greater overhead than HeapAlloc.
+    hDIB = GlobalAlloc(GHND, dwBmpSize);
+    lpbitmap = (char*)GlobalLock(hDIB);
+
+    // Gets the "bits" from the bitmap, and copies them into a buffer 
+    // that's pointed to by lpbitmap.
+    GetDIBits(hdcWindow, hbmScreen, 0,
+        (UINT)bmpScreen.bmHeight,
+        lpbitmap,
+        (BITMAPINFO*)&bi, DIB_RGB_COLORS);
+
+    // A file is created, this is where we will save the screen capture.
+    hFile = CreateFile(L"d:\\captureqwsxA.bmp",
+        GENERIC_WRITE,
+        0,
+        NULL,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL, NULL);
+
+    // Add the size of the headers to the size of the bitmap to get the total file size.
+    dwSizeofDIB = dwBmpSize + sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+
+    // Offset to where the actual bitmap bits start.
+    bmfHeader.bfOffBits = (DWORD)sizeof(BITMAPFILEHEADER) + (DWORD)sizeof(BITMAPINFOHEADER);
+
+    // Size of the file.
+    bmfHeader.bfSize = dwSizeofDIB;
+
+    // bfType must always be BM for Bitmaps.
+    bmfHeader.bfType = 0x4D42; // BM.
+
+    WriteFile(hFile, (LPSTR)&bmfHeader, sizeof(BITMAPFILEHEADER), &dwBytesWritten, NULL);
+    WriteFile(hFile, (LPSTR)&bi, sizeof(BITMAPINFOHEADER), &dwBytesWritten, NULL);
+    WriteFile(hFile, (LPSTR)lpbitmap, dwBmpSize, &dwBytesWritten, NULL);
+
+    // Unlock and Free the DIB from the heap.
+    GlobalUnlock(hDIB);
+    GlobalFree(hDIB);
+
+    // Close the handle for the file that was created.
+    CloseHandle(hFile);
+
+    // Clean up.
+done:
+    DeleteObject(hbmScreen);
+    DeleteObject(hdcMemDC);
+
 
     return 0;
 }
