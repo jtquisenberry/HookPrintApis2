@@ -20,6 +20,9 @@ void printToPrinter(string dcSource, string logFile, string bitmapFile);
 void printToPrinter2();
 int CaptureAnImage(HDC hDC, HBITMAP hbmScreen, HDC hdcWindow);
 void DrawGraphics(HDC hDC);
+void reportJob(HANDLE phPrinter, int jobId);
+void drawPrinter(HANDLE phPrinter, HDC hDC);
+void drawDesktop(HDC windowDC);
 
 int __cdecl main(int argc, char* argv[])
 {
@@ -84,9 +87,25 @@ int __cdecl main(int argc, char* argv[])
 }
 
 
-void printToPrinter2()
+void workflowPrinterGdiplusDefault()
 {
+    // A pointer to a null-terminated string that specifies the name of the device for which the 
+    // printer-configuration property sheet is displayed.
+    wchar_t pDeviceName[MAX_PATH];
+
+    // On input, specifies the size, in characters, of the pszBuffer buffer.On output, receives the size, in 
+    // characters, of the printer name string, including the terminating null character.
+    DWORD pcchBuffer(ARRAYSIZE(pDeviceName));
+
+    GetDefaultPrinter(pDeviceName, &pcchBuffer);
+    // Microsoft Print to PDF (redirected 1)
+    // >>> pcchBuffer
+    // 38
+    
+    int status = -1;
+
     HANDLE pHandle;
+    status = OpenPrinter(pDeviceName, &pHandle, NULL);
 
     DOC_INFO_1 pDocInfo;
     memset(&pDocInfo, 0, sizeof(pDocInfo));
@@ -99,175 +118,191 @@ void printToPrinter2()
     lpdef.DesiredAccess = PRINTER_ACCESS_USE;
     lpdef.pDatatype = L"RAW";
 
-
     DWORD  pcWritten = 0;
+    
+    int jobId = 0;
+    jobId = StartDocPrinter(pHandle, 1, (LPBYTE)&pDocInfo);
+    status = StartPagePrinter(pHandle);
+
+    /* Write Text*/
     //"\x1B(s3B18.90" // To print 18.90 in Bold.
-//	char *cBuffer = "\x1b*p300x600YHelloWorld"; // Ec is used for the escape.
+    // char *cBuffer = "\x1b*p300x600YHelloWorld"; // Ec is used for the escape.
     char cBuffer[10] = "ToPrint";
-
-
-    int x = -1;
-
-    x = OpenPrinter(L"hp LaserJet 1320 PCL 6", &pHandle, NULL);
-    int JobID = 0;
-
-    JobID = StartDocPrinter(pHandle, 1, (LPBYTE)&pDocInfo);
-
-
-    x = StartPagePrinter(pHandle);
-
-
-    x = WritePrinter(pHandle, "\x1B(s3B18.90", 20, &pcWritten);
-
-
-    //	x = WritePrinter(pHandle,cBuffer,sizeof(cBuffer),&pcWritten);
-    //		MessageBox("In write printer loop","OK");
-
-
-    //	if( x = WritePrinter(pHandle,"\f",(DWORD)1,&pcWritten))
-    //		MessageBox("In Eject","BYE");
+    status = WritePrinter(pHandle, "\x1B(s3B18.90", 20, &pcWritten);
+    status = WritePrinter(pHandle, cBuffer, sizeof(cBuffer), &pcWritten);
+    status = WritePrinter(pHandle, "\f", (DWORD)1, &pcWritten);
 
     EndPagePrinter(pHandle);
     EndDocPrinter(pHandle);
     ClosePrinter(pHandle);
 
+    return;
 }
 
 
-void printToPrinter(string dcSource, string logFile, string bitmapFile)
-{
-    // https://learn.microsoft.com/en-us/windows/win32/printdocs/openprinter
-    // https://learn.microsoft.com/en-us/windows/win32/printdocs/documentproperties
-    // https://learn.microsoft.com/en-us/windows/win32/printdocs/getdefaultprinter
-    // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getdesktopwindow
-    // https://learn.microsoft.com/en-us/windows/win32/dlgbox/using-common-dialog-boxes?redirectedfrom=MSDN
+void workflowPrinterDcUser() {
+    HDC printerDC = 0x0;
+    
+    PRINTDLG pd;
+    HWND hwnd = GetDesktopWindow();
 
+    // Initialize PRINTDLG
+    ZeroMemory(&pd, sizeof(pd));
+    pd.lStructSize = sizeof(pd);
+    pd.hwndOwner = hwnd;
+    pd.hDevMode = NULL;     // Don't forget to free or store hDevMode.
+    pd.hDevNames = NULL;     // Don't forget to free or store hDevNames.
+    pd.Flags = PD_USEDEVMODECOPIESANDCOLLATE | PD_RETURNDC;
+    pd.nCopies = 1;
+    pd.nFromPage = 0xFFFF;
+    pd.nToPage = 0xFFFF;
+    pd.nMinPage = 1;
+    pd.nMaxPage = 0xFFFF;
+
+    if (!(PrintDlg(&pd) == TRUE))
+    {
+        // ShowError(L"PrintDlg");
+    }
+    else
+    {
+        printerDC = pd.hDC;
+    }
+
+    PDEVMODE returnedDevmode = NULL;
+    // In this example, the DEVMODE structure returned by 
+    //    the printer dialog box is copied to a local memory
+    //    block and a pointer to the printer name that is 
+    //    stored in the copied DEVMODE structure is saved.
+    //
+    //  Lock the handle to get a pointer to the DEVMODE structure.
+    returnedDevmode = (PDEVMODE)GlobalLock(pd.hDevMode);
+    WCHAR* dmDeviceName = returnedDevmode->dmDeviceName;
+
+    HANDLE pHandle;
+    int status = -999;
+    status = OpenPrinter(dmDeviceName, &pHandle, NULL);
+
+    wprintf(L"hwndOwner: 0x%#016p\n", pd.hwndOwner);
+    wprintf(L"nFromPage: %d\n", pd.nFromPage);
+    wprintf(L"nToPage: %d\n", pd.nToPage);
+    wprintf(L"nMinPage: %d\n", pd.nMinPage);
+    wprintf(L"nMaxPage: %d\n", pd.nMaxPage);
+    wprintf(L"nCopies: %d\n", pd.nCopies);
+    wprintf(L"lpPrintTemplateName: %s\n", pd.lpPrintTemplateName);
+
+    drawPrinter(pHandle, printerDC);
+    ClosePrinter(pHandle);
+    DeleteDC(printerDC);
+
+    return;
+}
+
+void workflowPrinterDcDefault() {
     PRINTDLG pd;
     HWND hwnd;
-    HDC printerDC;
-
-    // A pointer to a variable that receives a handle (not thread safe) to the open printer or print server object.
     HANDLE phPrinter;
-
-    if (dcSource == "User") {
-        PRINTDLG pd;
-        HWND hwnd = GetDesktopWindow();
-
-        // Initialize PRINTDLG
-        ZeroMemory(&pd, sizeof(pd));
-        pd.lStructSize = sizeof(pd);
-        pd.hwndOwner = hwnd;
-        pd.hDevMode = NULL;     // Don't forget to free or store hDevMode.
-        pd.hDevNames = NULL;     // Don't forget to free or store hDevNames.
-        pd.Flags = PD_USEDEVMODECOPIESANDCOLLATE | PD_RETURNDC;
-        pd.nCopies = 1;
-        pd.nFromPage = 0xFFFF;
-        pd.nToPage = 0xFFFF;
-        pd.nMinPage = 1;
-        pd.nMaxPage = 0xFFFF;
-
-        if (!(PrintDlg(&pd) == TRUE))
-        {
-            // ShowError(L"PrintDlg");
-        }
-        else
-        {
-            printerDC = pd.hDC;
-        }
-
-        wprintf(L"hwndOwner: 0x%#016p\n", pd.hwndOwner);
-        wprintf(L"nFromPage: %d\n", pd.nFromPage);
-        wprintf(L"nToPage: %d\n", pd.nToPage);
-        wprintf(L"nMinPage: %d\n", pd.nMinPage);
-        wprintf(L"nMaxPage: %d\n", pd.nMaxPage);
-        wprintf(L"nCopies: %d\n", pd.nCopies);
-        wprintf(L"lpPrintTemplateName: %s\n", pd.lpPrintTemplateName);
-    }
-
-
-    if (dcSource == "Default") {
-
-        // A pointer to a DEVMODE structure that receives the printer configuration data specified by the user.
-        DEVMODE* pDevModeOutput;
-
-        // A pointer to a null-terminated string that specifies the name of the device for which the 
-        // printer-configuration property sheet is displayed.
-        wchar_t pDeviceName[MAX_PATH];
-
-        // On input, specifies the size, in characters, of the pszBuffer buffer.On output, receives the size, in 
-        // characters, of the printer name string, including the terminating null character.
-        DWORD pcchBuffer(ARRAYSIZE(pDeviceName));
-
-        GetDefaultPrinter(pDeviceName, &pcchBuffer);
-        // Microsoft Print to PDF (redirected 1)
-        // >>> pcchBuffer
-        // 38
-
-        OpenPrinter(pDeviceName, &phPrinter, NULL);
-        wprintf(L"PRINTER\n");
-        wprintf(L"Device Name: %s\n", pDeviceName);
-        wprintf(L"Handle: 0x%#016p\n", phPrinter);
-        wprintf(L"\n");
-        // PRINTER
-        // Device Name : Bullzip PDF Printer
-        // Handle : 0x000002307C40ADE0
-
-        int size = DocumentProperties(NULL, phPrinter, pDeviceName, NULL, NULL, 0);
-        pDevModeOutput = (DEVMODE*)malloc(size);
-        DocumentProperties(NULL, phPrinter, pDeviceName, pDevModeOutput, NULL, DM_OUT_BUFFER);
-        // wprintf(pDevModeOutput->dmDeviceName);
-        // Microsoft Print to PDF (redire
-        wprintf(L"DocumentProperties\n");
-        wprintf(L"dmDeviceName: %s\n", pDevModeOutput->dmDeviceName);
-        wprintf(L"dmFormName: %s\n", pDevModeOutput->dmFormName);
-        wprintf(L"dmPrintQuality: %d\n", pDevModeOutput->dmPrintQuality);
-        wprintf(L"dmScale: %d\n", pDevModeOutput->dmScale);
-        wprintf(L"dmCopies: %d\n", pDevModeOutput->dmCopies);
-        wprintf(L"\n");
-        // DocumentProperties
-        // dmDeviceName: Bullzip PDF Printer
-        // dmFormName : Letter
-        // dmPrintQuality : 300
-        // dmScale : 100
-        // dmCopies : 1
-
-        printerDC = CreateDC(L"WINSPOOL", pDeviceName, NULL, pDevModeOutput);
-        wprintf(L"Device Context\n");
-        wprintf(L"Handle: 0x%#016p\n", printerDC);
-        wprintf(L"\n");
-        // Device Context
-        // Handle: 0x000000007C215306
-    }
     
+    HDC printerDC;
     
+    // A pointer to a DEVMODE structure that receives the printer configuration data specified by the user.
+    DEVMODE* pDevModeOutput;
 
+    // A pointer to a null-terminated string that specifies the name of the device for which the 
+    // printer-configuration property sheet is displayed.
+    wchar_t pDeviceName[MAX_PATH];
 
+    // On input, specifies the size, in characters, of the pszBuffer buffer.On output, receives the size, in 
+    // characters, of the printer name string, including the terminating null character.
+    DWORD pcchBuffer(ARRAYSIZE(pDeviceName));
 
-    int status = -999;
-    int JobId = -999;
+    GetDefaultPrinter(pDeviceName, &pcchBuffer);
+    // Microsoft Print to PDF (redirected 1)
+    // >>> pcchBuffer
+    // 38
 
+    OpenPrinter(pDeviceName, &phPrinter, NULL);
+    wprintf(L"PRINTER\n");
+    wprintf(L"Device Name: %s\n", pDeviceName);
+    wprintf(L"Handle: 0x%#016p\n", phPrinter);
+    wprintf(L"\n");
+    // PRINTER
+    // Device Name : Bullzip PDF Printer
+    // Handle : 0x000002307C40ADE0
+
+    int size = DocumentProperties(NULL, phPrinter, pDeviceName, NULL, NULL, 0);
+    pDevModeOutput = (DEVMODE*)malloc(size);
+    DocumentProperties(NULL, phPrinter, pDeviceName, pDevModeOutput, NULL, DM_OUT_BUFFER);
+    // wprintf(pDevModeOutput->dmDeviceName);
+    // Microsoft Print to PDF (redire
+    wprintf(L"DocumentProperties\n");
+    wprintf(L"dmDeviceName: %s\n", pDevModeOutput->dmDeviceName);
+    wprintf(L"dmFormName: %s\n", pDevModeOutput->dmFormName);
+    wprintf(L"dmPrintQuality: %d\n", pDevModeOutput->dmPrintQuality);
+    wprintf(L"dmScale: %d\n", pDevModeOutput->dmScale);
+    wprintf(L"dmCopies: %d\n", pDevModeOutput->dmCopies);
+    wprintf(L"\n");
+    // DocumentProperties
+    // dmDeviceName: Bullzip PDF Printer
+    // dmFormName : Letter
+    // dmPrintQuality : 300
+    // dmScale : 100
+    // dmCopies : 1
+
+    printerDC = CreateDC(L"WINSPOOL", pDeviceName, NULL, pDevModeOutput);
+    wprintf(L"Device Context\n");
+    wprintf(L"Handle: 0x%#016p\n", printerDC);
+    wprintf(L"\n");
+    // Device Context
+    // Handle: 0x000000007C215306
+
+    drawPrinter(phPrinter, printerDC);
+    DeleteDC(printerDC);
+
+    return;
+}
+
+void workflowDesktopDc() {
+    // hWnd: A handle to the window whose DC is to be retrieved.If this value is NULL, GetDC retrieves the 
+    // DC for the entire screen.
+    HDC hDC = GetDC(NULL);
+    drawDesktop(hDC);
+    DeleteDC(hDC);
+}
+
+void drawPrinter(HANDLE phPrinter, HDC printerDC) {
+    int status = -999; 
+    int jobId = -999;
+    
     DOCINFO info;
     memset(&info, 0, sizeof(info));
     info.cbSize = sizeof(info);
-    JobId = StartDoc(printerDC, &info);
-    wprintf(L"DOCINFO\n");
-    wprintf(L"cbSize: %d\n", info.cbSize);
-    wprintf(L"lpszDocName: %s\n", info.lpszDocName);
-    wprintf(L"lpszOutput: %s\n", info.lpszOutput);
-    wprintf(L"\n");
-    // DOCINFO
-    // cbSize: 40
-    // lpszDocName : (null)
-    // lpszOutput : (null)
-    
+    jobId = StartDoc(printerDC, &info);
+    reportJob(phPrinter, jobId);
+    StartPage(printerDC);
+    DrawGraphics(printerDC);
+    status = EndPage(printerDC);
+    status = EndDoc(printerDC);
+    status = DeleteDC(printerDC);
+
+    return;
+}
+
+void drawDesktop(HDC windowDC) {
+    DrawGraphics(windowDC);
+}
+
+void reportJob(HANDLE phPrinter, int jobId) {
+    int status = -999;
+    //int JobId = -999;
+
     int Level = 1;  // To retrieve a JOB_INFO_1 structure.
     JOB_INFO_1* pJobInfo = 0;
     DWORD cbBuf = 0;
     DWORD pcbNeeded;
     DWORD bytesNeeded = 0;
-    status = GetJob(phPrinter, JobId, Level, (LPBYTE)pJobInfo, cbBuf, &pcbNeeded);
+    status = GetJob(phPrinter, jobId, Level, (LPBYTE)pJobInfo, cbBuf, &pcbNeeded);
     pJobInfo = (JOB_INFO_1*)malloc(pcbNeeded);
-    status = GetJob(phPrinter, JobId, Level, (LPBYTE)pJobInfo, pcbNeeded, &pcbNeeded);
+    status = GetJob(phPrinter, jobId, Level, (LPBYTE)pJobInfo, pcbNeeded, &pcbNeeded);
     wprintf(L"JOB_INFO_1\n");
     wprintf(L"JobId: %d\n", pJobInfo->JobId);
     wprintf(L"pPrinterName: %s\n", pJobInfo->pPrinterName);
@@ -286,18 +321,71 @@ void printToPrinter(string dcSource, string logFile, string bitmapFile)
     // Position : 18
     // TotalPages : (null)
     // Submitted : ?
+    
+    return;
+}
 
+void printToPrinter(string dcSource, string logFile, string bitmapFile)
+{
+    // https://learn.microsoft.com/en-us/windows/win32/printdocs/openprinter
+    // https://learn.microsoft.com/en-us/windows/win32/printdocs/documentproperties
+    // https://learn.microsoft.com/en-us/windows/win32/printdocs/getdefaultprinter
+    // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getdesktopwindow
+    // https://learn.microsoft.com/en-us/windows/win32/dlgbox/using-common-dialog-boxes?redirectedfrom=MSDN
 
+    PRINTDLG pd;
+    HWND hwnd;
+    HDC hDC = 0x0;
 
-    DrawGraphics(printerDC);
+    // A pointer to a variable that receives a handle (not thread safe) to the open printer or print server object.
+    HANDLE phPrinter;
 
-    status = ClosePrinter(phPrinter);
+    if (dcSource == "User") {
+        //workflowPrinterDcUser();
+        workflowPrinterGdiplusDefault();
+    }
+    else if (dcSource == "Default") {
+        workflowPrinterDcDefault();
+    }
+    else if (dcSource == "GdiplusDefault") {
+        workflowPrinterGdiplusDefault();
+    }
+    else if (dcSource == "Desktop") {
+        workflowDesktopDc();
+    }
+    else {
+        workflowPrinterDcDefault();
+    }
 
     
 
-    if (dcSource == "User") {
-        DeleteDC(pd.hDC);
+    /*
+
+    if (drawDevice == "Printer") {
+        reportJob(phPrinter, printerDC);
     }
+    
+    if (drawDevice == "Printer") {
+        reportJob(phPrinter, printerDC);
+    }
+    else if (drawDevice == "Desktop") {
+        drawDesktop();
+    }
+
+
+    */
+
+
+    
+
+
+    DrawGraphics(hDC);
+
+    
+
+    
+
+
 
     return;
 }
@@ -380,36 +468,22 @@ void ShowError(LPTSTR lpszFunction)
 // int CaptureAnImage(HWND hWnd)
 
 
-void DrawGraphics(HDC printerDC)
+void DrawGraphics(HDC hDC)
 {
-    int status = StartPage(printerDC);
+    int status = -999;
 
     HPEN pen = CreatePen(PS_SOLID, 10, RGB(0, 192, 0));
     HBRUSH brush = CreateSolidBrush(RGB(192, 0, 0));
-    HBRUSH original = (HBRUSH)SelectObject(printerDC, brush);
+    HBRUSH original = (HBRUSH)SelectObject(hDC, brush);
 
     TCHAR text[] = L"Defenestration can be hazardous";
-    TextOut(printerDC, 150, 150, text, ARRAYSIZE(text));
+    TextOut(hDC, 150, 150, text, ARRAYSIZE(text));
 
-    status = Rectangle(printerDC, 100, 100, 400, 200);
-    status = Rectangle(printerDC, 500, 500, 900, 900);
-    HDC memDC = CreateCompatibleDC(printerDC);
-    HBITMAP memBM = CreateCompatibleBitmap(printerDC, 400, 400);
-    SelectObject(memDC, memBM);
+    status = Rectangle(hDC, 100, 100, 400, 200);
+    status = Rectangle(hDC, 500, 500, 900, 900);
 
-    CaptureAnImage(memDC, memBM, printerDC);
-
-
-
-
-    status = EndPage(printerDC);
-    status = EndDoc(printerDC);
-    status = DeleteDC(printerDC);
-    
+    return;
 }
-
-
-
 
 int CaptureAnImage(HDC hdcMemDC, HBITMAP hbmScreen, HDC hdcWindow)
 {
@@ -434,7 +508,6 @@ int CaptureAnImage(HDC hdcMemDC, HBITMAP hbmScreen, HDC hdcWindow)
         hdcWindow,
         0, 0,
         SRCCOPY);
-
 
     // Get the BITMAP from the HBITMAP.
     GetObject(hbmScreen, sizeof(BITMAP), &bmpScreen);
@@ -470,7 +543,7 @@ int CaptureAnImage(HDC hdcMemDC, HBITMAP hbmScreen, HDC hdcWindow)
         (BITMAPINFO*)&bi, DIB_RGB_COLORS);
 
     // A file is created, this is where we will save the screen capture.
-    hFile = CreateFile(L"d:\\captureqwsx.bmp",
+    hFile = CreateFile(L"d:\\captureqwsxA.bmp",
         GENERIC_WRITE,
         0,
         NULL,
