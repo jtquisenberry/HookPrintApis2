@@ -15,14 +15,13 @@ using namespace std;
 
 /* Note: could also use malloc() and free() */
 void printAdapterInfo();
-void printToPrinter();
-void printToPrinter(string dcSource, string logFile, string bitmapFile);
-void printToPrinter2();
-int CaptureAnImage(HDC hDC, HBITMAP hbmScreen, HDC hdcWindow);
+void printToPrinter(string dcSource, string logFile, string bitmapFile, string printerName);
+int CaptureAnImagePrinter(HDC hDC, HBITMAP hbmScreen, HDC hdcWindow);
 void DrawGraphics(HDC hDC);
 void reportJob(HANDLE phPrinter, int jobId);
 void drawPrinter(HANDLE phPrinter, HDC hDC);
 void drawDesktop(HDC windowDC);
+void workflowPrinterDcName(string printerName);
 
 int __cdecl main(int argc, char* argv[])
 {
@@ -33,6 +32,7 @@ int __cdecl main(int argc, char* argv[])
     string logFile = "";
     string bitmapFile = "";
     string dcSource = "Default";    
+    string printerName = "";
     
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
@@ -51,6 +51,9 @@ int __cdecl main(int argc, char* argv[])
         else if (arg == "--bitmap") {
             bitmapFile = argv[i + 1];
         }
+        else if (arg == "--printerName") {
+            printerName = argv[i + 1];
+        }
         else if (arg == "--source") {
             string temp = argv[i + 1];
             if (temp == "Default") {
@@ -62,6 +65,10 @@ int __cdecl main(int argc, char* argv[])
             else if (temp == "Desktop") {
                 dcSource = temp;
             }
+            else if (temp == "Name") {
+                dcSource = temp;
+            }
+            
         }
         else {
             arguments.push_back(arg);
@@ -74,7 +81,7 @@ int __cdecl main(int argc, char* argv[])
         std::cout << "Custom argument: " << arg << "\n";
     }
 
-    printToPrinter(dcSource, logFile, bitmapFile);
+    printToPrinter(dcSource, logFile, bitmapFile, printerName);
     
     /*
     while (true) {
@@ -84,59 +91,6 @@ int __cdecl main(int argc, char* argv[])
     */
    
     return 0;
-}
-
-
-void workflowPrinterGdiplusDefault()
-{
-    // A pointer to a null-terminated string that specifies the name of the device for which the 
-    // printer-configuration property sheet is displayed.
-    wchar_t pDeviceName[MAX_PATH];
-
-    // On input, specifies the size, in characters, of the pszBuffer buffer.On output, receives the size, in 
-    // characters, of the printer name string, including the terminating null character.
-    DWORD pcchBuffer(ARRAYSIZE(pDeviceName));
-
-    GetDefaultPrinter(pDeviceName, &pcchBuffer);
-    // Microsoft Print to PDF (redirected 1)
-    // >>> pcchBuffer
-    // 38
-    
-    int status = -1;
-
-    HANDLE pHandle;
-    status = OpenPrinter(pDeviceName, &pHandle, NULL);
-
-    DOC_INFO_1 pDocInfo;
-    memset(&pDocInfo, 0, sizeof(pDocInfo));
-    pDocInfo.pDatatype = L"RAW";
-    pDocInfo.pDocName = L"MyPrintControl";
-    pDocInfo.pOutputFile = NULL;
-
-    PRINTER_DEFAULTS lpdef; // this is for the parameter in the OpenPrinter API.
-    ZeroMemory(&lpdef, sizeof(lpdef));
-    lpdef.DesiredAccess = PRINTER_ACCESS_USE;
-    lpdef.pDatatype = L"RAW";
-
-    DWORD  pcWritten = 0;
-    
-    int jobId = 0;
-    jobId = StartDocPrinter(pHandle, 1, (LPBYTE)&pDocInfo);
-    status = StartPagePrinter(pHandle);
-
-    /* Write Text*/
-    //"\x1B(s3B18.90" // To print 18.90 in Bold.
-    // char *cBuffer = "\x1b*p300x600YHelloWorld"; // Ec is used for the escape.
-    char cBuffer[10] = "ToPrint";
-    status = WritePrinter(pHandle, "\x1B(s3B18.90", 20, &pcWritten);
-    status = WritePrinter(pHandle, cBuffer, sizeof(cBuffer), &pcWritten);
-    status = WritePrinter(pHandle, "\f", (DWORD)1, &pcWritten);
-
-    EndPagePrinter(pHandle);
-    EndDocPrinter(pHandle);
-    ClosePrinter(pHandle);
-
-    return;
 }
 
 
@@ -182,6 +136,7 @@ void workflowPrinterDcUser() {
     int status = -999;
     status = OpenPrinter(dmDeviceName, &pHandle, NULL);
 
+    wprintf(L"\n");
     wprintf(L"hwndOwner: 0x%#016p\n", pd.hwndOwner);
     wprintf(L"nFromPage: %d\n", pd.nFromPage);
     wprintf(L"nToPage: %d\n", pd.nToPage);
@@ -197,9 +152,9 @@ void workflowPrinterDcUser() {
     return;
 }
 
+
+
 void workflowPrinterDcDefault() {
-    PRINTDLG pd;
-    HWND hwnd;
     HANDLE phPrinter;
     
     HDC printerDC;
@@ -261,6 +216,69 @@ void workflowPrinterDcDefault() {
     return;
 }
 
+
+
+void workflowPrinterDcName(string printerName) {
+    PRINTDLG pd;
+    HWND hwnd;
+    HANDLE phPrinter;
+
+    HDC printerDC;
+
+    // A pointer to a DEVMODE structure that receives the printer configuration data specified by the user.
+    DEVMODE* pDevModeOutput;
+
+    // Convert string printerName to LPWSTR pDeviceName
+    // Initializing an object of wstring
+    wstring temp = wstring(printerName.begin(), printerName.end());
+    // Applying c_str() method on temp
+    LPWSTR pDeviceName = (LPWSTR)temp.c_str();
+
+    OpenPrinter(pDeviceName, &phPrinter, NULL);
+    wprintf(L"PRINTER\n");
+    wprintf(L"Device Name: %s\n", pDeviceName);
+    wprintf(L"Handle: 0x%#016p\n", phPrinter);
+    wprintf(L"\n");
+    // PRINTER
+    // Device Name : Bullzip PDF Printer
+    // Handle : 0x000002307C40ADE0
+
+    int size = DocumentProperties(NULL, phPrinter, pDeviceName, NULL, NULL, 0);
+    pDevModeOutput = (DEVMODE*)malloc(size);
+    DocumentProperties(NULL, phPrinter, pDeviceName, pDevModeOutput, NULL, DM_OUT_BUFFER);
+    // wprintf(pDevModeOutput->dmDeviceName);
+    // Microsoft Print to PDF (redire
+    wprintf(L"DocumentProperties\n");
+    wprintf(L"dmDeviceName: %s\n", pDevModeOutput->dmDeviceName);
+    wprintf(L"dmFormName: %s\n", pDevModeOutput->dmFormName);
+    wprintf(L"dmPrintQuality: %d\n", pDevModeOutput->dmPrintQuality);
+    wprintf(L"dmScale: %d\n", pDevModeOutput->dmScale);
+    wprintf(L"dmCopies: %d\n", pDevModeOutput->dmCopies);
+    wprintf(L"\n");
+    // DocumentProperties
+    // dmDeviceName: Bullzip PDF Printer
+    // dmFormName : Letter
+    // dmPrintQuality : 300
+    // dmScale : 100
+    // dmCopies : 1
+
+    printerDC = CreateDC(L"WINSPOOL", pDeviceName, NULL, pDevModeOutput);
+    wprintf(L"Device Context\n");
+    wprintf(L"Handle: 0x%#016p\n", printerDC);
+    wprintf(L"\n");
+    // Device Context
+    // Handle: 0x000000007C215306
+
+    drawPrinter(phPrinter, printerDC);
+    DeleteDC(printerDC);
+
+    return;
+}
+
+
+
+
+
 void workflowDesktopDc() {
     // hWnd: A handle to the window whose DC is to be retrieved.If this value is NULL, GetDC retrieves the 
     // DC for the entire screen.
@@ -280,6 +298,14 @@ void drawPrinter(HANDLE phPrinter, HDC printerDC) {
     reportJob(phPrinter, jobId);
     StartPage(printerDC);
     DrawGraphics(printerDC);
+
+    HDC memDC = CreateCompatibleDC(printerDC);
+    HBITMAP memBM = CreateCompatibleBitmap(printerDC, 400, 400);
+    SelectObject(memDC, memBM);
+    CaptureAnImagePrinter(memDC, memBM, printerDC);
+
+
+
     status = EndPage(printerDC);
     status = EndDoc(printerDC);
     status = DeleteDC(printerDC);
@@ -325,7 +351,7 @@ void reportJob(HANDLE phPrinter, int jobId) {
     return;
 }
 
-void printToPrinter(string dcSource, string logFile, string bitmapFile)
+void printToPrinter(string dcSource, string logFile, string bitmapFile, string printerName)
 {
     // https://learn.microsoft.com/en-us/windows/win32/printdocs/openprinter
     // https://learn.microsoft.com/en-us/windows/win32/printdocs/documentproperties
@@ -337,18 +363,15 @@ void printToPrinter(string dcSource, string logFile, string bitmapFile)
     HWND hwnd;
     HDC hDC = 0x0;
 
-    // A pointer to a variable that receives a handle (not thread safe) to the open printer or print server object.
-    HANDLE phPrinter;
 
     if (dcSource == "User") {
-        //workflowPrinterDcUser();
-        workflowPrinterGdiplusDefault();
+        workflowPrinterDcUser();
     }
     else if (dcSource == "Default") {
         workflowPrinterDcDefault();
     }
-    else if (dcSource == "GdiplusDefault") {
-        workflowPrinterGdiplusDefault();
+    else if (dcSource == "Name") {
+        workflowPrinterDcName(printerName);
     }
     else if (dcSource == "Desktop") {
         workflowDesktopDc();
@@ -379,7 +402,7 @@ void printToPrinter(string dcSource, string logFile, string bitmapFile)
     
 
 
-    DrawGraphics(hDC);
+    // DrawGraphics(hDC);
 
     
 
@@ -485,7 +508,7 @@ void DrawGraphics(HDC hDC)
     return;
 }
 
-int CaptureAnImage(HDC hdcMemDC, HBITMAP hbmScreen, HDC hdcWindow)
+int CaptureAnImagePrinter(HDC hdcMemDC, HBITMAP hbmScreen, HDC hdcWindow)
 {
     //HDC hdcScreen;
     //HDC hdcWindow;
