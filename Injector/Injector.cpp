@@ -5,9 +5,14 @@
 #include <Windows.h>
 #include <winternl.h>
 #include <tchar.h>
+#include <wchar.h>
+#include <vector>
+#include <string>
 #pragma comment(lib, "ntdll")
 
 #include "stdafx.h"
+
+using namespace std;
 
 void PrintError(LPTSTR lpszFunction);
 PROCESS_INFORMATION StartTargetExe(__in LPCWSTR targetPath);
@@ -18,23 +23,87 @@ BOOL WINAPI InjectDll(__in PROCESS_INFORMATION pi, __in LPCWSTR lpcwszDll);
 DWORD GetMainThreadId(DWORD pId); 
 BOOL ListProcessThreads(DWORD dwOwnerPID);
 // BOOL ListProcessThreads(DWORD dwOwnerPID);
+bool is_numeric(string str);
 
 int main(int argc, char* argv[])
 {
-    int pid = 0;
-    char* first_arg = argv[1];
+    std::vector<std::string> arguments;
 
+    string logFile = "";
+    string bitmapFile = "";
+    string dcSource = "Default";
+    string printerName = "";
+    string pidString = "";
+    wstring targetPath = L"";
+    int pid = -999;
+    
+    for (int i = 1; i < argc; ++i) {
+        std::string arg(argv[i]);
+
+        if (arg == "-h" || arg == "--help") {
+            std::cout << "Usage: " << argv[0] << " [options]\n";
+            std::cout << "Options:\n";
+            std::cout << "  -h, --help  Show this help message\n";
+        }
+        else if (arg == "-v" || arg == "--version") {
+            std::cout << "MyProgram version 1.0\n";
+        }
+        else if (arg == "--pid") {
+            string pidString = argv[i + 1];
+            if (is_numeric(pidString)) {
+                pid = stoi(pidString);
+            }
+        }
+        else if (arg == "--exe") {
+            targetPath = argv[i + 1];
+        }
+        else if (arg == "--logfile") {
+            logFile = argv[i + 1];
+        }
+        else if (arg == "--bitmap") {
+            bitmapFile = argv[i + 1];
+        }
+        else if (arg == "--printerName") {
+            printerName = argv[i + 1];
+        }
+        else if (arg == "--source") {
+            string temp = argv[i + 1];
+            if (temp == "Default") {
+                dcSource = temp;
+            }
+            else if (temp == "User") {
+                dcSource = temp;
+            }
+            else if (temp == "Desktop") {
+                dcSource = temp;
+            }
+            else if (temp == "Name") {
+                dcSource = temp;
+            }
+            else if (temp == "Both") {
+                dcSource = temp;
+            }
+        }
+        else {
+            arguments.push_back(arg);
+        }
+    }
+
+    // Process custom arguments
+    for (const std::string& arg : arguments) {
+        // Add your custom argument processing logic here
+        std::cout << "Custom argument: " << arg << "\n";
+    }
+    
     HANDLE hProcess;
     PROCESS_INFORMATION pi;
-    
 
     wchar_t selfdir[MAX_PATH] = { 0 };
     GetModuleFileName(NULL, selfdir, MAX_PATH);
     PathRemoveFileSpec(selfdir);
     std::wstring dllPath = std::wstring(selfdir) + TEXT("\\hooks.dll");
 
-    if (is_numeric(first_arg)) {
-        pid = atoi(first_arg);
+    if (pid > 0) {
         hProcess = GetTargetExe(pid);
 
         if (InjectDll(hProcess, dllPath.c_str())) {
@@ -43,18 +112,14 @@ int main(int argc, char* argv[])
         else {
             printf("Terminating the Injector app...");
         }
-        
     }
-    else {
-        //wchar_t selfdir[MAX_PATH] = { 0 };
-        //GetModuleFileName(NULL, selfdir, MAX_PATH);
-        //PathRemoveFileSpec(selfdir);
-
-        //std::wstring dllPath = std::wstring(selfdir) + TEXT("\\hooks.dll");
-        std::wstring targetPath = std::wstring(selfdir) + TEXT("\\target.exe");
-
-        pi = StartTargetExe(targetPath.c_str());
+    else { 
+        if (dcSource == "") {
+            targetPath = wstring(selfdir) + L"\\target.exe";
+        }
         
+        pi = StartTargetExe(targetPath.c_str());
+
         //InjectDll(hProcess);
         if (InjectDll(pi, dllPath.c_str())) {
             printf("Dll was successfully injected.\n");
@@ -64,9 +129,8 @@ int main(int argc, char* argv[])
         }
     }
 
-
-    
-    _getch();
+    // Returns the character read. There's no error return.
+    int character = _getch();
 
     return 0;
 }
@@ -88,6 +152,22 @@ bool is_numeric(char* str) {
     
     return false;
 }
+
+bool is_numeric(string str) {
+    int total = str.length();
+    int numeric_count = 0;
+
+    for (int i = 0; i < str.length(); i++) {
+        if (isdigit(str[i]))
+            numeric_count++;
+    }
+
+    if (total - numeric_count == 0)
+        return true;
+
+    return false;
+}
+
 
 HANDLE GetTargetExe(__in int pid) {
     HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);

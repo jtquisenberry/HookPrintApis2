@@ -224,8 +224,6 @@ void workflowPrinterDcDefault() {
 
 
 void workflowPrinterDcName(string printerName) {
-    PRINTDLG pd;
-    HWND hwnd;
     HANDLE phPrinter;
 
     HDC printerDC;
@@ -391,9 +389,7 @@ void printToPrinter(string dcSource, string logFile, string bitmapFile, string p
     // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getdesktopwindow
     // https://learn.microsoft.com/en-us/windows/win32/dlgbox/using-common-dialog-boxes?redirectedfrom=MSDN
 
-    PRINTDLG pd;
-    HWND hwnd;
-    HDC hDC = 0x0;
+    // HDC hDC = 0x0;
 
 
     if (dcSource == "User") {
@@ -414,34 +410,6 @@ void printToPrinter(string dcSource, string logFile, string bitmapFile, string p
     else {
         workflowPrinterDcDefault();
     }
-
-    
-
-    /*
-
-    if (drawDevice == "Printer") {
-        reportJob(phPrinter, printerDC);
-    }
-    
-    if (drawDevice == "Printer") {
-        reportJob(phPrinter, printerDC);
-    }
-    else if (drawDevice == "Desktop") {
-        drawDesktop();
-    }
-
-
-    */
-
-
-    
-
-
-    // DrawGraphics(hDC);
-
-    
-
-    
 
 
 
@@ -518,8 +486,8 @@ void ShowError(LPTSTR lpszFunction)
 {
     // Retrieve the system error message for the last-error code
 
-    LPVOID lpMsgBuf;
-    LPVOID lpDisplayBuf;
+    //LPVOID lpMsgBuf;
+    //LPVOID lpDisplayBuf;
     DWORD dw = GetLastError();
 }
 
@@ -642,8 +610,6 @@ done:
 
 int CaptureAnImageDc(HDC hdcWindow)
 {
-    HDC hdcScreen;
-    //HDC hdcWindow;
     HDC hdcMemDC = NULL;
     HBITMAP hbmScreen = NULL;
     BITMAP bmpScreen;
