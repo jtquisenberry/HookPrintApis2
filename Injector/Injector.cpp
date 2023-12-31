@@ -34,7 +34,8 @@ int main(int argc, char* argv[])
     string dcSource = "Default";
     string printerName = "";
     string pidString = "";
-    wstring targetPath = L"";
+    string targetPath = "";
+    wstring targetPathW = L"";
     int pid = -999;
     
     for (int i = 1; i < argc; ++i) {
@@ -55,7 +56,10 @@ int main(int argc, char* argv[])
             }
         }
         else if (arg == "--exe") {
-            targetPath = argv[i + 1];
+            string targetPath = argv[i + 1];
+            std::wstring targetPathW2(&targetPath[0], &targetPath[targetPath.length()]);
+            targetPathW = targetPathW2;
+            int debug_breakpoint = 0;
         }
         else if (arg == "--logfile") {
             logFile = argv[i + 1];
@@ -98,10 +102,12 @@ int main(int argc, char* argv[])
     HANDLE hProcess;
     PROCESS_INFORMATION pi;
 
+    // wstring targetPathW = L"";
+
     wchar_t selfdir[MAX_PATH] = { 0 };
     GetModuleFileName(NULL, selfdir, MAX_PATH);
     PathRemoveFileSpec(selfdir);
-    std::wstring dllPath = std::wstring(selfdir) + TEXT("\\hooks.dll");
+    std::wstring dllPath = std::wstring(selfdir) + TEXT("\\hooks2.dll");
 
     if (pid > 0) {
         hProcess = GetTargetExe(pid);
@@ -114,23 +120,34 @@ int main(int argc, char* argv[])
         }
     }
     else { 
-        if (dcSource == "") {
-            targetPath = wstring(selfdir) + L"\\target.exe";
+        if (targetPathW == L"") {
+            targetPathW = wstring(selfdir) + L"\\target.exe";
         }
         
-        pi = StartTargetExe(targetPath.c_str());
+        pi = StartTargetExe(targetPathW.c_str());
 
         //InjectDll(hProcess);
         if (InjectDll(pi, dllPath.c_str())) {
+            printf("\n");
+            printf("******************************\n");
             printf("Dll was successfully injected.\n");
+            printf("******************************\n");
         }
         else {
+            printf("\n");
+            printf("******************************\n");
             printf("Terminating the Injector app...");
+            printf("******************************\n");
         }
     }
 
     // Returns the character read. There's no error return.
-    int character = _getch();
+    //int character = _getch();
+
+    printf("\n");
+    printf("******************************\n");
+    printf("EXIT...");
+    printf("******************************\n");
 
     return 0;
 }
@@ -434,4 +451,11 @@ void PrintError(LPTSTR lpszFunction)
 
     LocalFree(lpMsgBuf);
     LocalFree(lpDisplayBuf);
+}
+
+int StringToWString(std::wstring& ws, const std::string& s)
+{
+    std::wstring wsTmp(s.begin(), s.end());
+    ws = wsTmp;
+    return 0;
 }

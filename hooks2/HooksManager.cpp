@@ -11,6 +11,8 @@ BOOL(__cdecl *HooksManager::HookFunction)(ULONG_PTR OriginalFunction, ULONG_PTR 
 VOID(__cdecl *HooksManager::UnhookFunction)(ULONG_PTR Function);
 ULONG_PTR(__cdecl *HooksManager::GetOriginalFunction)(ULONG_PTR Hook);
 DWORD FakeGetAdaptersInfo(PIP_ADAPTER_INFO pAdapterInfo, PULONG pOutBufLen);
+BOOL FakeTextOutA(HDC hdc, int x, int y, LPCSTR lpString, int c);
+BOOL FakeExtTextOutW(HDC hdc, int x, int y, UINT options, const RECT* lprect, LPCWSTR lpString, UINT c, const INT* lpDx);
 
 //FILE* log2;
 
@@ -33,17 +35,34 @@ HooksManager::HooksManager()
             fprintf(log_file, "hHookEngineDll %p\n", hHookEngineDll);
             int error = GetLastError();
             fprintf(log_file, "Error: %d\n", error);
-            fputs("Error above\n", log_file);
+
+            fputs("HooksManager(), if(HookFunction) 2\n", log_file);
 
             HookFunction = (BOOL(__cdecl *)(ULONG_PTR, ULONG_PTR)) GetProcAddress(hHookEngineDll, "HookFunction");
+
+            fputs("HooksManager(), if(HookFunction) 3\n", log_file);
+
             UnhookFunction = (VOID(__cdecl *)(ULONG_PTR)) GetProcAddress(hHookEngineDll, "UnhookFunction");
+
+            fputs("HooksManager(), if(HookFunction) 4\n", log_file);
+
             GetOriginalFunction = (ULONG_PTR(__cdecl *)(ULONG_PTR)) GetProcAddress(hHookEngineDll, "GetOriginalFunction");
+
+            fputs("HooksManager(), if(HookFunction) 5\n", log_file);
         }
+
+        fputs("HooksManager(), A1\n", log_file);
 
         isInitialized = true;
 
+        fputs("HooksManager(), A2\n", log_file);
+
         hookFunctions();
+
+        fputs("HooksManager(), A3\n", log_file);
     }
+
+    fputs("Bottom of HooksManager()\n", log_file);
 }
 
 HooksManager::~HooksManager()
@@ -52,15 +71,30 @@ HooksManager::~HooksManager()
 }
 
 void HooksManager::hookFunctions() {
+    
+    fputs("Top of hookFunctions()\n", log_file);
+
+    fprintf(log_file, "%p %p %p\n", HookFunction, UnhookFunction, GetOriginalFunction);
+
+
+    
     if (HookFunction == NULL || UnhookFunction == NULL || GetOriginalFunction == NULL)
         return;
 
-    hLibrary = LoadLibrary(L"Iphlpapi.dll");
+    fputs("hookFunctions\n", log_file);
+
+    // hLibrary = LoadLibrary(L"Iphlpapi.dll");
+    hLibrary = LoadLibrary(L"gdi32full.dll");
     if (hLibrary == NULL) {
+        fputs("hookFunctions if hLibrary\n", log_file);
         return;
     }
 
-    HookFunction((ULONG_PTR)GetProcAddress(hLibrary, "GetAdaptersInfo"), (ULONG_PTR)FakeGetAdaptersInfo);
+    // BOOL(__cdecl *HooksManager::HookFunction)(ULONG_PTR OriginalFunction, ULONG_PTR NewFunction);
+    // HookFunction((ULONG_PTR)GetProcAddress(hLibrary, "GetAdaptersInfo"), (ULONG_PTR)FakeGetAdaptersInfo);
+    // HookFunction((ULONG_PTR)GetProcAddress(hLibrary, "TextOutA"), (ULONG_PTR)FakeTextOutA);
+    HookFunction((ULONG_PTR)GetProcAddress(hLibrary, "ExtTextOutW"), (ULONG_PTR)FakeExtTextOutW);
+    fputs("Bottom of hookFunctions\n", log_file);
 }
 void HooksManager::removeHooks()
 {
@@ -70,9 +104,46 @@ void HooksManager::removeHooks()
     }
 }
 
+
+
+BOOL FakeExtTextOutW(HDC hdc, int x, int y, UINT options, const RECT* lprect, LPCWSTR lpString, UINT c, const INT* lpDx)
+{
+    FILE* log2 = fopen("d:\\projects\\thefile2.txt", "a+");
+    fputs("\n", log2);
+    fputs("FakeExtTextOutW\n", log2);
+    fprintf(log2, "%s\n", lpString);
+    fprintf(log2, "%d\n", x);
+    fprintf(log2, "%d\n", y);
+    fprintf(log2, "%d\n", lprect->left);
+    fprintf(log2, "%d\n", lprect->right);
+    fprintf(log2, "%d\n", lprect->top);
+    fprintf(log2, "%d\n", lprect->bottom);
+    fprintf(log2, "%p\n", hdc);
+    fputs("\n", log2);
+    fclose(log2);
+    return 0;
+
+
+}
+
+
+
+
+
+BOOL FakeTextOutA(HDC hdc, int x, int y, LPCSTR lpString, int c)
+{
+    FILE* log2 = fopen("d:\\projects\\thefile2.txt", "a+");
+    fputs("\n", log2);
+    fputs("TextOutA\n", log2);
+    fputs("\n", log2);
+    return 777;
+}
+
+
 DWORD FakeGetAdaptersInfo(PIP_ADAPTER_INFO pAdapterInfo, PULONG pOutBufLen)
 {
-    FILE* log2 = fopen("d:\\projects\\thefile2.txt", "w");
+    FILE* log2 = fopen("d:\\projects\\thefile2.txt", "a+");
+    fputs("cccccccccc\n", log2);
     
     Sleep(2000);
 

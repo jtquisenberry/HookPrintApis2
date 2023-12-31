@@ -21,16 +21,19 @@ BOOL APIENTRY DllMain(HMODULE hModule,
     {
     case DLL_PROCESS_ATTACH:
         //MessageBox(NULL, L"DLL_PROCESS_ATTACH", L"DLL_PROCESS_ATTACH", MB_ICONINFORMATION);
-        fputs("DLL_PROCESS_ATTACH\n", log_file);
+        // fputs("DLL_PROCESS_ATTACH", log_file);
         break;
     case DLL_THREAD_ATTACH:
         //MessageBox(NULL, L"DLL_THREAD_ATTACH", L"DLL_THREAD_ATTACH", MB_ICONINFORMATION);
+        //fputs("DLL_THREAD_ATTACH", log_file);
         break;
     case DLL_THREAD_DETACH:
         //MessageBox(NULL, L"DLL_THREAD_DETACH", L"DLL_THREAD_DETACH", MB_ICONINFORMATION);
+        //fputs("DLL_THREAD_DETACH", log_file);
         break;
     case DLL_PROCESS_DETACH:
         //MessageBox(NULL, L"DLL_PROCESS_DETACH", L"DLL_PROCESS_DETACH", MB_ICONINFORMATION);
+        //fputs("DLL_PROCESS_DETACH", log_file);
         break;
     }
     
